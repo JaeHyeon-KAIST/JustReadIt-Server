@@ -640,4 +640,59 @@ app.get("/getBookConnection", (req, res) => {
     });
 });
 
+app.post("/getConnectedBook", (req, res) => {
+    const { bookId } = req.body;
+
+    if (!bookId) {
+        return res.status(400).json({
+            status: "error",
+            message: "bookId is required"
+        });
+    }
+
+    const query = `
+        SELECT DISTINCT b.id, b.title, b.author, b.publisher, b.cover
+        FROM (
+            SELECT targetBookId AS connectedBookId
+            FROM BookConnection
+            WHERE baseBookId = ?
+
+            UNION ALL
+
+            SELECT targetBookId AS connectedBookId
+            FROM NoteConnection
+            WHERE baseBookId = ?
+        ) AS connections
+        JOIN Book b ON b.id = connections.connectedBookId
+        WHERE b.id != ?; -- 본인 책 제외
+    `;
+
+
+    db.query(query, [bookId, bookId, bookId, bookId, bookId], (err, results) => {
+        if (err) {
+            console.error("Error fetching connected books:", err);
+            return res.status(500).json({
+                status: "error",
+                message: "Failed to fetch connected books."
+            });
+        }
+
+        // 결과를 중복 제거 후 반환
+        const uniqueBooks = [];
+        const bookIds = new Set();
+
+        results.forEach(book => {
+            if (!bookIds.has(book.id)) {
+                bookIds.add(book.id);
+                uniqueBooks.push(book);
+            }
+        });
+
+        res.status(200).json({
+            status: "success",
+            data: uniqueBooks
+        });
+    });
+});
+
 server.listen(port, () => console.log(`Server running on ${port}`));
