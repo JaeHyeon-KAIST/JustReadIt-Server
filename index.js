@@ -623,6 +623,7 @@ app.get("/getBookConnection", (req, res) => {
             targetBookId,
             COUNT(*) as count
         FROM BookConnection
+        WHERE baseBookId != targetBookId
         GROUP BY baseBookId, targetBookId
     `;
 
