@@ -197,7 +197,7 @@ app.post("/saveNote", async (req, res) => {
         UPDATE Note
         SET text = ?
         WHERE id = ?
-          AND bookId = ?
+        AND bookId = ?
     `;
     const values = [text, noteId, bookId];
 
@@ -212,6 +212,82 @@ app.post("/saveNote", async (req, res) => {
             console.log(`노트 ID ${noteId}, 책 ID ${bookId}가 MySQL에 성공적으로 저장되었습니다.`);
 
             try {
+                const links = extractLinksFromText(text);
+
+                const deleteQuery = "DELETE FROM BookConnection WHERE baseNoteId = ?";
+                db.query(deleteQuery, [noteId], (deleteErr) => {
+                    if (deleteErr) {
+                        console.error("기존 BookConnection 데이터 삭제 실패: ", deleteErr);
+                        return;
+                    }
+                    console.log(`기존 BookConnection 데이터 삭제 완료 (baseNoteId: ${noteId})`);
+                
+                    // 새로운 데이터 삽입
+                    const bookQuery = `
+                        INSERT INTO BookConnection (baseNoteId, baseBookId, targetBookId)
+                        VALUES ?
+                    `;
+                    const bookValues = [];
+                
+                    // book 링크에 대한 데이터 준비
+                    links.bookIds.forEach(targetBookId => {
+                        bookValues.push([noteId, bookId, targetBookId]);
+                    });
+                
+                    // 데이터베이스에 저장
+                    if (bookValues.length > 0) {
+                        db.query(bookQuery, [bookValues], (insertErr) => {
+                            if (insertErr) {
+                                console.error("BookConnection 데이터 추가 실패: ", insertErr);
+                                return;
+                            }
+                            console.log("새로운 BookConnection 데이터 추가 완료");
+                        });
+                    } else {
+                        console.log("추가할 BookConnection 데이터가 없습니다.");
+                    }
+
+                    // note 링크들에 대한 정보를 가져오는 쿼리
+                    if (links.noteIds.length > 0) {
+                        const noteQuery = `
+                            SELECT id, bookId
+                            FROM Note
+                            WHERE id IN (?)
+                        `;
+                        
+                        db.query(noteQuery, [links.noteIds], (noteErr, noteResults) => {
+                            if (noteErr) {
+                                console.error("Note 정보 조회 실패: ", noteErr);
+                                return;
+                            }
+                            
+                            // note 링크에 대한 데이터 준비
+                            const noteValues = [];
+                            noteResults.forEach(noteResult => {
+                                noteValues.push([noteId, bookId, noteResult.bookId, noteResult.id]);
+                            });
+
+                            // 데이터베이스에 저장
+                            if (noteValues.length > 0) {
+                                const insertQuery = `
+                                    INSERT INTO NoteConnection (baseNoteId, baseBookId, targetBookId, targetNoteId)
+                                    VALUES ?
+                                `;
+                                
+                                db.query(insertQuery, [noteValues], (insertErr) => {
+                                    if (insertErr) {
+                                        console.error("NoteConnection 데이터 추가 실패: ", insertErr);
+                                        return;
+                                    }
+                                    console.log("새로운 NoteConnection 데이터 추가 완료");
+                                });
+                            } else {
+                                console.log("추가할 NoteConnection 데이터가 없습니다.");
+                            }
+                        });
+                    }
+                });
+
                 const namespace = index.namespace("justReadIt");
 
                 // 기존 벡터 삭제 로직 개선
@@ -280,6 +356,36 @@ app.post("/saveNote", async (req, res) => {
         }
     });
 });
+
+// 텍스트에서 링크를 추출하고 출력하는 함수
+function extractLinksFromText(htmlText) {
+    const $ = cheerio.load(htmlText);
+    const links = {
+        bookIds: [],
+        noteIds: []
+    };
+
+    console.log("=== Detected Internal Links ===");
+    $("a").each((_, element) => {
+        const href = $(element).attr("href");
+
+        // /justreadit/book/{id} 링크 처리
+        if (href && href.startsWith("/justreadit/book/")) {
+            const bookId = href.split("/").pop();
+            console.log(`Found Book Link: ${href}`);
+            links.bookIds.push(bookId);
+        }
+
+        // /justreadit/note/{id} 링크 처리
+        if (href && href.startsWith("/justreadit/note/")) {
+            const noteId = href.split("/").pop();
+            console.log(`Found Note Link: ${href}`);
+            links.noteIds.push(noteId);
+        }
+    });
+
+    return links;
+}
 
 /**
  * HTML 텍스트에서 문장을 추출하는 함수
