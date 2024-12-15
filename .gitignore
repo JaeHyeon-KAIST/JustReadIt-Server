@@ -1,0 +1,21 @@
+# 환경 변수 파일
+.env
+
+# Node.js dependencies
+node_modules/
+
+# 로그 파일
+*.log
+npm-debug.log*
+
+# 빌드 결과물
+dist/
+build/
+
+# 에디터 설정 파일
+.idea/
+.vscode/
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
