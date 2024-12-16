@@ -641,6 +641,31 @@ app.get("/getBookConnection", (req, res) => {
     });
 });
 
+app.get("/getNoteConnection", (req, res) => {
+    const query = `
+        SELECT 
+            baseBookId,
+            targetBookId,
+            COUNT(*) as count
+        FROM NoteConnection
+        WHERE baseBookId != targetBookId
+        GROUP BY baseBookId, targetBookId
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("NoteConnection 데이터 조회 실패:", err);
+            return res.status(500).json({
+                status: "error",
+                message: "Failed to fetch note connections"
+            });
+        }
+
+        // 결과가 없는 경우도 빈 배열로 반환
+        res.status(200).json(results);
+    });
+});
+
 app.post("/getConnectedBook", (req, res) => {
     const { bookId } = req.body;
 
